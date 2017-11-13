@@ -5,6 +5,5 @@
     "max_data_receive": 8192,                      
     "api": ["/api/v1/stats"],                       
     "threshold": 1.00001,
-    "redis_server": "localhost",
     "cache_timeout": 5                         
 }
