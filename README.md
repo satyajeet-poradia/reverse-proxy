@@ -51,7 +51,8 @@ $ chmod a+x Test.sh
 $ ./Test.sh
 ```
 
-
+ # logging
+logs will be generated in reverseproxy.log file in your app directory
 
 
 
