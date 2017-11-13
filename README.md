@@ -37,6 +37,19 @@ Edit a confiuration with format listed in the section "configuring json file" an
 ```shell
 $ python app.py --config my_config.json
 ```
+# running application using shell script
+Run Run.sh to run the application. Modify path in Run.sh to the dir of your app.
+```shell
+$ chmod a+x Run.sh
+$ ./Run.sh
+```
+
+# testing
+Run Test.sh to ensure system capabilities
+```shell
+$ chmod a+x Test.sh
+$ ./Test.sh
+```
 
 
 
