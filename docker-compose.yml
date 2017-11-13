@@ -1,0 +1,8 @@
+version: '3'
+services:
+  proxy-server:
+    build: ./new_project
+    volumes: 
+      - ./new_project:/usr/src/app
+    ports:
+      - 8080:8080
