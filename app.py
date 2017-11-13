@@ -1,3 +1,4 @@
+#! /usr/bin/python
 """ 
 A server that acts as a proxy service 
 """
@@ -13,7 +14,6 @@ import json
 import socket
 import thread
 import os
-import re
 import time
 import models
 from peewee import *
@@ -56,7 +56,7 @@ def create_request(request, config):
             # Return generated request
             return ("\r\n".join(request) + "\r\n", request[0].split(' ')[1])
     except:
-        return
+        pass
 
 def create_response(response):
     """
@@ -101,7 +101,7 @@ def start_proxy_server(config):
         try:
             cache_requests = cache.CacheList()
         except Exception as error:
-            print error
+            logging.error("Problem initializing cache: %s", error)
 
         try:
             # Create a socket for proxy server
@@ -115,7 +115,8 @@ def start_proxy_server(config):
 
             # Start listening for clients
             s.listen(config['queue'])
-
+            
+            print "Proxy server running on {}:{}".format(proxy_server[0], proxy_server[1])
             logging.info("Proxy server running on %s:%s", proxy_server[0], proxy_server[1])
         except socket.error, (value, message):
             if s:
@@ -133,7 +134,7 @@ def start_proxy_server(config):
                 # Start new thread for each connected client
                 thread.start_new_thread(proxy_thread, (conn, client_addr, config, cache_requests))
             except Exception as Error:
-                print Error
+                ogging.error("Problem initializing a Thread: %s", message)
         s.close()
 
 def proxy_thread(conn, client_addr, config, cache_requests):
@@ -144,9 +145,16 @@ def proxy_thread(conn, client_addr, config, cache_requests):
     :return: None
     """
 
-    # Get a request from browser
-    request = conn.recv(999999)
-    request_time = time.time()
+    try:
+        # Get a request from browser
+        request = conn.recv(999999)
+        
+        # Inititalize a request start time
+        request_time = time.time()
+    except Exception as error:
+        logging.error("Error receiving request from client: %s", error)
+
+    
 
 
     try:
@@ -162,12 +170,18 @@ def proxy_thread(conn, client_addr, config, cache_requests):
             slow_requests = dict()
 
             # Get all records with count
-            for record in models.Details.select(models.Details.url, fn.Count(models.Details.url).alias('count')).group_by(models.Details.url):
-                quries[record.url] = record.count
+            try:
+                for record in models.Details.select(models.Details.url, fn.Count(models.Details.url).alias('count')).group_by(models.Details.url):
+                    quries[record.url] = record.count
+            except Exception as error:
+                logging.error("Problem entering record to DB: %s", error)
 
-            # Get all records that took more than threshold time
-            for record in models.Details.select().where(time > config['threshold']):
-                slow_requests[record.url] = record.time
+            try:
+                # Get all records that took more than threshold time
+                for record in models.Details.select().where(time > config['threshold']):
+                    slow_requests[record.url] = record.time
+            except Exception as error:
+                logging.error("Problem entering record to DB: %s", error)
             
             # Bind both responses to response object
             response['quries'] = quries
@@ -176,31 +190,49 @@ def proxy_thread(conn, client_addr, config, cache_requests):
             # Construct a HTTP JSON Resposne
             r, response_headers_raw, res = create_response(response)
 
-            #send Response to the browser
-            conn.send(r.encode(encoding="utf-8"))
-            conn.send(response_headers_raw.encode(encoding="utf-8"))
-            conn.send('\n'.encode(encoding="utf-8"))
-            conn.send(res.encode(encoding="utf-8"))
+            try:
+                #send Response to the browser
+                conn.send(r.encode(encoding="utf-8"))
+                conn.send(response_headers_raw.encode(encoding="utf-8"))
+                conn.send('\n'.encode(encoding="utf-8"))
+                conn.send(res.encode(encoding="utf-8"))
+            except Exception as error:
+                logging.error("Problem sending data to client: %s", error)
 
         # Check if requested URL already in cache
         elif cache_requests.get_entry(server_request[1]):
-            # Get Response
-            response = cache_requests.get_entry(server_request[1])
-            #send Response
-            conn.send(response)
+            try:
+                # Get Response
+                response = cache_requests.get_entry(server_request[1])
+            except Exception as error:
+                logging.error("Problem getting cached entry: %s", error)
+            
+            try:
+                #send Response
+                conn.send(response)
+            except Exception as error:
+                logging.error("Problem sending data to client: %s", error)
+
             try:
                 # Enter a record to Database
                 models.Details.create(url = str(server_request[1]), time = time.time() - request_time, dt = time.time())
             except Exception as error:
-                pass
+                logging.error("Problem entering record to DB: %s", error)
         else:
-            # Create a socket for web server
-            web_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
+            try:
+                # Create a socket for web server
+                web_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            except Exception as error:
+                logging.error("Problem initializing socket: %s", error)
 
             # Bind socket to web server 
             hip = socket.gethostbyname('webservices.nextbus.com')
-            web_socket.connect((hip, 80))
-            web_socket.send(server_request[0])
+
+            try:
+                web_socket.connect((hip, 80))
+                web_socket.send(server_request[0])
+            except Exception as error:
+                logging.error("Problem connecting to socket: %s", error)
 
             # set socket non blocking
             web_socket.setblocking(0)
@@ -241,7 +273,7 @@ def proxy_thread(conn, client_addr, config, cache_requests):
                 # Enter a record to Database
                 models.Details.create(url = str(server_request[1]), time = time.time() - request_time, dt = time.time())
             except Exception as error:
-                pass
+                logging.error("Problem entering record to DB: %s", error)
     
             # Send all data to browser
             conn.send("".join(total_data))
@@ -251,13 +283,13 @@ def proxy_thread(conn, client_addr, config, cache_requests):
                 ca = cache.Cache(server_request[1], "".join(total_data), config['cache_timeout'])
                 cache_requests.add_entry(ca)
             except Exception as error:
-                print error
+                logging.error("Problem caching entry: %s", error)
 
             # Close web socket
             web_socket.close()
 
     except Exception as error:
-        pass
+        logging.error("Problem getting request: %s", error)
 
     conn.close()
 
@@ -277,8 +309,11 @@ def load_config(config_file):
     :return: JSON fomratted config
     """
     logging.info("Loading config file %s", config_file)
-    with open(config_file) as f:
-        return json.load(f)
+    try:
+        with open(config_file) as f:
+            return json.load(f)
+    except Exception as error:
+        logging.error("Failed to read configurations: %s", error)
     return None
 
 def main():
@@ -287,9 +322,6 @@ def main():
     This function loads the config.json file anf runs the proxy server.
     :return: None
     """
-    # Initialize log file
-    logging.basicConfig(filename='reverseproxy.log', level= logging.DEBUG)
-
     args = parse_args()
     # Check if config file provided
     if args.config_file:
@@ -300,14 +332,23 @@ def main():
             start_proxy_server(config)
         except:
             logging.error("Failed to start server %s", config['proxy_server'])
+    else:
+        error = "Config file not found"
+        logging.error("Failed to load config file: %s", error)
 
 
 """
 Calling main()
 """
 if __name__=="__main__":
+    # Initialize log file
+    logging.basicConfig(filename='reverseproxy.log', level= logging.DEBUG)
+
     # Initialize data base
-    models.initialize()
+    try:
+        models.initialize()
+    except Exception as error:
+        logging.error("Failed to initialize models: %s", error)
 
     # Bootstrap server
     main()
