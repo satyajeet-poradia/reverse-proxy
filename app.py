@@ -134,7 +134,7 @@ def start_proxy_server(config):
                 # Start new thread for each connected client
                 thread.start_new_thread(proxy_thread, (conn, client_addr, config, cache_requests))
             except Exception as Error:
-                ogging.error("Problem initializing a Thread: %s", message)
+                logging.error("Problem initializing a Thread: %s", message)
         s.close()
 
 def proxy_thread(conn, client_addr, config, cache_requests):
